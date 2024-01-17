@@ -1,0 +1,176 @@
+esphome:
+  name: esphome-web-cf9188
+  includes:
+    - "hot_seat.h"
+
+substitutions:
+  update_speed: 2ms
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+api:
+  encryption:
+    key: !secret light_controller_encyption_key
+
+ota:
+  password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  use_address: "192.168.4.112"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esphome-Web-Cf9188"
+    password: !secret wifi_ap_password
+
+captive_portal:
+    
+# Enable logging
+logger:
+  level: ERROR
+
+number:
+  - platform: template
+    name: hot_seat_start
+    id: hot_seat_start
+    step: 1
+    max_value: 240
+    min_value: 0
+    optimistic: true
+    initial_value: 0
+    entity_category: config
+  - platform: template
+    name: hot_seat_end
+    id: hot_seat_end
+    step: 1
+    max_value: 240
+    min_value: 0
+    optimistic: true
+    initial_value: 20
+    entity_category: config
+  - platform: template
+    name: fade_to_black_amount
+    id: fade_to_black_amount
+    step: 1
+    max_value: 100
+    min_value: 0
+    optimistic: true
+    initial_value: 90
+    entity_category: config
+  - platform: template
+    name: speed
+    id: speed
+    step: 1
+    min_value: 1
+    max_value: 10
+    initial_value: 1
+    entity_category: config
+    optimistic: true
+  - platform: template
+    name: hot_seat_select
+    id: hot_seat_select
+    min_value: 1
+    max_value: 6
+    step: 1
+    optimistic: true
+    initial_value: 1
+    
+
+globals:
+  - id: hot_seat_indexes
+    type: int[7]
+    initial_value: "{0, 37, 80, 119, 155, 202, 240}"
+
+
+light:
+  - platform: neopixelbus
+    type: GRBW
+    variant: SK6812
+    pin: GPIO23
+    num_leds: 240
+    name: "NeoPixel Light"
+    gamma_correct: 1.0
+    effects:
+      - addressable_lambda:
+          name: Hot Seat Calibrate
+          update_interval: ${update_speed}
+          lambda: |-
+            it.all().fade_to_black(id(fade_to_black_amount).state);
+            if (id(hot_seat_start).state <= id(hot_seat_end).state) {
+              it.range(id(hot_seat_start).state, id(hot_seat_end).state) = current_color;
+            } else {
+              it.range(0, id(hot_seat_end).state) = current_color;
+              it.range(id(hot_seat_start).state, 240) = current_color;
+            }
+
+      - addressable_lambda:
+          name: Seat 1
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 0, 37, current_color, id(speed).state);
+      - addressable_lambda:
+          name: Seat 2
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 37, 80, current_color, id(speed).state);
+      - addressable_lambda:
+          name: Seat 3
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 80, 119, current_color, id(speed).state);
+      - addressable_lambda:
+          name: Seat 4
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 119, 155, current_color, id(speed).state);
+      - addressable_lambda:
+          name: Seat 5
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 155, 202, current_color, id(speed).state);
+      - addressable_lambda:
+          name: Seat 6
+          update_interval: ${update_speed}
+          lambda: |-
+            hot_seat(it, 202, 240, current_color, id(speed).state);
+
+      - addressable_lambda:
+          name: Hot Seat Activate
+          update_interval: ${update_speed}
+          lambda: |-
+            int start = id(hot_seat_indexes)[int(id(hot_seat_select).state) - 1];
+            int stop = id(hot_seat_indexes)[int(id(hot_seat_select).state)];
+            hot_seat(it, start, stop, current_color, id(speed).state);
+
+      - addressable_lambda:
+          name: Seat Damage
+          update_interval: 125ms
+          lambda: |-
+            int flash_per_sec = 4;
+            int seconds = 1;
+            // update_interval = seconds / flash_per_sec*2
+
+            int start = id(hot_seat_indexes)[int(id(hot_seat_select).state) - 1];
+            int stop = id(hot_seat_indexes)[int(id(hot_seat_select).state)];
+
+            static int i = 0;
+            static int r = 0;
+            if (initial_run){
+              i = 0;
+              r = 0;
+            }
+            i++;
+            if (i < flash_per_sec * 2) {
+              if (i % 2 == 0){
+                it.range(start, stop) = Color(255, 0, 0);
+              } else {
+                it.range(start, stop) = Color(0, 0, 0);
+              }
+            } else {
+              it.range(start, stop) = Color(0, 0, 0);
+            }
